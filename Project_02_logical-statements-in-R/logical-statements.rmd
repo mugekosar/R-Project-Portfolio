@@ -1,0 +1,412 @@
+---
+title: 'Lab 02 - Identifying Groups'
+author: "Muge Kosar"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    theme: cerulean
+    highlight: haddock
+---
+
+
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      fig.width = 10, 
+                      fig.height = 6)
+
+```
+
+# Data
+
+Data Dictionary: [Syracuse City Tax Parcel Data](https://ds4ps.github.io/Data-Science-Class/DATA/syr_parcels.html) 
+
+<br>
+
+## Parcel Map Files
+
+```{r}
+
+library(sp)
+library(rgdal)
+library(geojsonio)                            # Load libraries
+
+```
+
+<br>
+
+```{r cache = TRUE}
+
+url <- paste0("https://raw.githubusercontent.com/DS4PS/Data",
+              "-Science-Class/master/DATA/downtown-syr.geojson")
+
+downtown <- geojson_read(url, what = "sp")    # Load parcel data
+
+plot(downtown,  
+     border = "gray60",
+     col = "gray80")                          # Visualize parcels
+
+```
+
+<br>
+
+**Example Solution:** Parcels with more than one acre.
+
+```{r}
+
+these <- downtown$acres > 1
+
+group.colors <- ifelse(test = these, 
+                       yes = "firebrick", 
+                       no = "gray80")
+
+plot(downtown,  
+     border=NA, 
+     col=group.colors)
+
+```
+
+<br>
+
+**Example Solution:** Parcels comprised of single families.
+
+```{r}
+
+unique(downtown$landuse)
+
+these <- downtown$landuse == "Single Family"
+
+group.colors <- ifelse(these, "firebrick", "gray80")
+
+plot(downtown,
+     border = NA, 
+     col = group.colors)
+
+```
+
+<br>
+
+# Solutions
+
+## Question 1
+
+*Where are the majority of vacant lots located in the downtown? Map your results.*
+
+```{r}
+
+# Print unique values in 'landuse' variable
+unique(downtown$landuse)                 
+
+# Create test if 'landuse' is "Vacant Land", assign outputs to object these
+these <- downtown$landuse == "Vacant Land"  
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80")  
+
+# Plot with particular colors, red when TRUE(Vacant land), gray when FALSE(not Vacant Land)
+plot(downtown,        
+     border = NA,                         
+     col = group.colors)
+
+```
+
+<br>
+
+## Question 2
+
+*How many parking lots are in downtown Syracuse? Map your results.*
+
+**ANSWER:** There are **78** parking lots in downtown Syracuse.
+
+```{r}
+
+# Print unique values in 'landuse' variable
+unique(downtown$landuse)            
+
+# Create test if landuse is Parking
+sum(downtown$landuse=="Parking")     
+
+# Assign logical output to object: 'these'
+these <- downtown$landuse=="Parking" 
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80") 
+
+# Plot with particular colors, red when TRUE(Parking), gray when FALSE(not Parking)
+plot(downtown,                  
+     border = NA, 
+     col = group.colors)
+
+```
+
+<br>
+
+## Question 3
+
+*Where is new construction located in the city?. Map your results.*
+
+```{r}
+
+# Find the number of buildings constructed after 1980(included),omit missing values
+sum(downtown$yearbuilt >= 1980, na.rm=TRUE) 
+
+# Assign logical output to object: 'these'
+these <- downtown$yearbuilt >= 1980         
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80")  
+
+# Plot with particular colors, red when TRUE(after 1980), gray when FALSE(before 1980)
+plot(downtown,                   
+     border = NA, 
+     col = group.colors)
+
+```
+
+*What proportion of commercial properties are built since 1980?*
+
+**ANSWER:** **14.35%** of commercial properties were built since 1980.
+
+```{r}
+
+# Print unique values in 'landuse' variable
+unique(downtown$landuse)               
+
+# Count all commercial properties and assign output to object sum_com
+sum_com <- sum(downtown$landuse== "Commercial", na.rm=TRUE)  
+
+# Count only commercial properties with buildings constructed during or later than 1980 and assign output to object sum_both
+sum_both <- sum(downtown$landuse== "Commercial" & downtown$yearbuilt >= 1980, na.rm=TRUE)  
+
+# Divide them and get proportion
+sum_both / sum_com*100           
+
+```
+
+<br>
+
+## Question 4
+
+*How many parcels have assessed values over $10 million? Map your results.*
+
+**ANSWER:** **16** parcels have assessed values over $10 M.
+
+```{r}
+
+#Find the parcels whose assessed values over $10m
+sum(downtown$assessedval > 10000000)      
+
+# Assign logical output to object: 'these'
+these <- downtown$assessedval > 10000000   
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80") 
+
+# Plot with particular colors, red when TRUE(over $10m), gray when FALSE(not over $10m)
+plot(downtown,                
+     border = NA, 
+     col = group.colors)
+
+```
+
+<br>
+
+## Question 5
+
+*How many properties are delinquent on taxes? Map your results.*
+
+**ANSWER:** **57** properties are delinquent on taxes.
+
+```{r}
+
+# Find properties which are delinquent on taxes (means greater than 0 values)
+sum(downtown$amtdelinqt > 0)         
+
+# Assign logical output to object: 'these'
+these <- downtown$amtdelinqt > 0      
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80")    
+
+# Plot with particular colors, red when TRUE(delinquent), gray when FALSE(not delinquent)
+plot(downtown,                      
+     border = NA,                          
+     col = group.colors)
+
+```
+
+<br>
+
+## Question 6
+
+*What proportion of parcels have delinquent tax payments owed?*
+
+**ANSWER:** **14.65%** of parcels have delinquent tax payments owed.
+
+```{r}
+
+# Find parcels which are delinquent and assign to group_delinquent
+group_delinquent <- downtown$amtdelinqt > 0   
+
+# Find proportion of values
+mean(group_delinquent)*100                    
+
+```
+
+<br>
+
+## Question 7
+
+*What proportion of commercial properties are delinquent on taxes?*
+*What proportion of delinquent tax bills are owed by commercial parcels?*
+
+**ANSWER:** **11.96%** of commercial properties are delinquent on taxes. 
+**43.86%** of delinquent tax dollars are owed by commercial parcels.
+
+```{r}
+
+## The first answer is tax-delinquent commercial properties over all commercial properties
+
+# Test if landuse is "Commercial" and assign it to object com
+com <- sum(downtown$landuse=="Commercial")     
+
+#Find commercial properties and delinquent ones on taxes and assign output to object group_com_delinquent
+group_com_delinquent <- sum(downtown$landuse=="Commercial" & downtown$amtdelinqt > 0) 
+
+# Divide tax-delinquent commercial properties over all commercial properties
+group_com_delinquent / com *100       
+
+# Find proportion of commercial properties and delinquent ones on taxes  
+mean(group_delinquent)                      
+# Sum of commercial properties and delinquent ones on taxes
+sum(group_delinquent==TRUE)       
+
+## The second answer is the tax dollars owed by commercial properties over all tax dollars owed
+
+# Sum of delinquent properties on taxes
+delinquent <- sum( downtown$amtdelinqt > 0)  
+
+# Divide tax owed by commercial properties over all tax dollars owed
+group_com_delinquent / delinquent *100      
+
+```
+
+<br>
+
+## Question 8
+
+*How many of each land use type are delinquent on taxes?*
+
+```{r}
+
+# Find parcels which are delinquent on taxes and assign it to group_delinquent
+group_delinquent <- downtown$amtdelinqt > 0  
+
+# Cross tabulation of landuse and properties which are delinquent on taxes
+table(downtown$landuse,group_delinquent)   
+
+```
+
+<br>
+
+
+## Challenge I
+
+*Map all of the land valued at over $1 million per acre.*
+
+```{r}
+
+# Find all of the land value per acre
+group_value <- downtown$assessedland/downtown$acres 
+
+# Test if land valued at over $1 million per acre.
+sum(group_value > 1000000)                           
+
+# Assign previous output to object these
+these <- group_value > 1000000                        
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80")    
+
+# Plot with particular colors, red when TRUE(over$1m), gray when FALSE(not over $1m) 
+plot(downtown,                       
+     border = NA,                          
+     col = group.colors)
+
+```
+
+<br>
+
+## Challenge II
+
+*Map all of the land valued at less than $500,000 per acre.*
+
+```{r}
+
+# Find all of the land value per acre
+group_value <- downtown$assessedland/downtown$acres  
+
+# Test if land valued less than $500,000 per acre.
+sum(group_value < 500000)                            
+
+# Assign previous output to object these
+these <- group_value < 500000                        
+
+# Provide TRUE/FALSE for previous test;if TRUE,color "firebrick", if FALSE, color "gray"
+group.colors <- ifelse(these, "firebrick", "gray80")   
+
+# Plot with particular colors, red when TRUE(<$500,000), gray when FALSE(not <$500,000)
+plot(downtown,                      
+     border = NA,                          
+     col = group.colors)
+
+
+```
+
+<br>
+
+## Challenge III
+
+*What is the total value of all of the commercial parcels in Downtown?*
+
+**ANSWER:** The total value of all commercial parcels is **$317,067,000**.
+
+```{r}
+
+# Test if landuse is commercial and assign output to object comm
+comm <- downtown$landuse == "Commercial"     
+
+# Take all commercial parcel values and assign output to object these
+these <- downtown[comm,]                    
+
+# Find total value of all commercial parcels 
+sum(these$assessedval)                       
+
+```
+
+<br>
+
+## Challenge IV
+
+*What is the total value of all of the non-commercial parcels in Downtown?*
+
+**ANSWER:** The total value of all non-commercial parcels is **$395,947,740**.
+
+```{r}
+
+# Test if landuse is non-commercial and assign output to object non_comm
+non_comm <- downtown$landuse != "Commercial" 
+
+# Take all non-commercial parcel values and assign it to object these
+these <- downtown[non_comm,]                  
+
+# Find total value of all non-commercial parcels 
+sum(these$assessedval)                       
+
+```
+
+<br>

@@ -1,0 +1,143 @@
+---
+title: 'Lab 01 - Functions and Vectors'
+author: "Muge Kosar"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    theme: cerulean
+    highlight: haddock
+---
+
+```{r include = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+```
+
+<br>
+
+# Data
+
+Data dictionary: [Syracuse city tax parcel data](http://data.syrgov.net/datasets/1b346804e1364a5eb85ccb53302e3c91_0) 
+
+```{r}
+
+URL <- "https://raw.githubusercontent.com/DS4PS/Data-Science-Class/master/DATA/syr_parcels.csv"
+dat <- read.csv( URL, stringsAsFactors=FALSE )
+
+```
+
+```{r, echo = FALSE}
+
+head( dat, 10 )         # Preview a dataset
+
+```
+
+```{r, echo = FALSE}
+
+head( dat$owner, 10 )   # Preview a variable ("vector")
+
+```
+
+<br>
+
+# Solutions
+
+## Question 1
+
+*How many tax parcels are in Syracuse, NY?* 
+
+**ANSWER:** There are **41502** tax parcels in Syracuse, NY. 
+
+
+```{r}
+
+nrow(dat)       # Find dataset dimensions which represent tax parcels in Syracuse, NY
+
+```
+
+<br>
+
+## Question 2
+
+*How many acres of land are in Syracuse, NY?*
+
+**ANSWER:** There are **12510.49** acres of land in Syracuse, NY.
+
+```{r}
+
+# Summarize numeric acres vector and ignore missing values which will count acres of land in Syracuse, NY
+
+sum(dat$acres,na.rm = TRUE)   
+
+```
+
+<br>
+
+## Question 3
+
+*How many vacant buildings are there in Syracuse, NY?*
+
+**ANSWER:** There are **1888** vacant buildings in Syracuse, NY.
+
+```{r}
+
+# Summarize vacantbuil vector and ignore missing values which will count vacant buildings in Syracuse, NY
+
+sum(dat$vacantbuil,na.rm = TRUE)  
+
+```
+
+
+## Question 4
+
+*What proportion of parcels are tax exempt?*
+
+**ANSWER:** **10.70069%** of parcels are tax exempt.
+
+```{r}
+
+# Find number of TRUEs on tax.exempt variable & get proportion of TRUEs which gives proportion of tax-exempt parcels
+
+sum(dat$tax.exempt,na.rm = TRUE) / length(dat$tax.exempt)      
+
+# Alternative option which gives same result but with mean function
+
+mean(dat$tax.exempt,na.rm = TRUE)
+
+```
+
+<br>
+
+## Question 5
+
+*Which neighborhood contains the most tax parcels?*
+
+**ANSWER:** **Eastwood** contains the most tax parcels.
+
+```{r}
+
+table(dat$neighborhood)       # Find  the frequency of neighborhood variable
+
+# (Optional) Find the maximum frequency of tax parcels and check name of neighborhood to narrow result
+
+max(table(dat$neighborhood),na.rm = TRUE)           # 
+
+```
+
+<br>
+
+## Question 6
+
+*Which neighborhood contains the most vacant lots?*
+
+**ANSWER:** **Near Westside** containts the most vacant lots.
+
+```{r}
+
+# Cross-tabulation of neighborhood and land_use variables
+
+table(dat$neighborhood,dat$land_use)          
+
+```

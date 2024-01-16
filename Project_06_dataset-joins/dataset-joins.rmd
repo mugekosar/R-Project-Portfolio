@@ -1,0 +1,510 @@
+---
+title: "Lab 06: Dataset Joins"
+author: "Muge Kosar"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    theme: flatly
+    highlight: haddock
+    toc: yes
+    toc_float: yes
+---
+
+```{r include = FALSE, cache = TRUE}
+
+library(readr)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(pander)
+library(scales)
+
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      fig.width = 10)     # Global knitr options
+
+options(scipen = 999)                     # Disable sci. notation
+
+`%!in%` <- Negate(`%in%`)                 # Custom filter function
+
+url <- "https://www.onetcenter.org/dl_files/database/db_26_3_text/"
+
+dbs <- c("Skills",
+         "Knowledge",
+         "Abilities",
+         "Interests",
+         "Job%20Zones",
+         "Work%20Values",
+         "Work%20Styles",
+         "Occupation%20Data",
+         "Alternate%20Titles",
+         "Technology%20Skills",
+         "Job%20Zone%20Reference",
+         "Education%2C%20Training%2C%20and%20Experience",
+         "Education%2C%20Training%2C%20and%20Experience%20Categories")
+
+txt <- paste0(url, dbs, ".txt")
+
+all <- lapply(txt, read_delim)
+
+names(all) <- gsub(pattern = "Education%2C%20Training%2C%20and|%20",
+                   replacement = "",
+                   x = dbs)
+
+for(i in 1:length(all)) assign(names(all)[i], all[[i]])   # Create objects
+
+rm(all)
+
+```
+
+<br>
+
+## Assignment Overview
+
+Follow the instructions below.
+
+<br>
+
+The following objects have been created for you from the [O*NET 26.3 Database](https://www.onetcenter.org/database.html). 
+
+1. `Abilities` measures innate or natural abilities of occupational incumbents
+2. `AlternateTitles` lists over 53,000 alternate names for O*NET occupations
+3. `Experience` measures various kinds of experience, albeit encoded
+4. `ExperienceCategories` decodes measured experience
+5. `Interests` measures occupations with the Holland Code (RIASEC) Test  
+6. `JobZoneReference` decodes classes of career development
+7. `JobZones` broad classes of career development for each occupation; encoded
+8. `Knowledge` defines areas of expertise and importance
+9. `OccupationData` lists the occupation SOC, title, and description
+10. `Skills` measures learned abilities of occupational incumbents
+11. `TechnologySkills` lists all relevant technology skills
+12. `WorkStyles` measures various performance indicators
+13. `WorkValues` measures important occupation qualities 
+
+<br>
+<br>
+<br>
+
+## Part 1: Basic Join Challenges
+
+The following challenges require no more then 2-3 tables and use the same column 
+names across all tables. Use basic `dplyr` verbs to answer specific questions.
+
+<br>
+
+**(1) Question:** Which 10 occupation titles (`OccupationData$Title`) have the 
+highest number of "hot technologies" (`TechnologySkills$HotTechnology`)?
+
+```{r cache=TRUE}
+
+OccupationData %>% 
+  left_join(TechnologySkills, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,`Hot Technology`) %>%
+  filter(`Hot Technology` == "Y") %>%
+  group_by(Title) %>%
+  summarize(`Hot Technology`=n()) %>%
+  arrange(-`Hot Technology`) %>%
+  head(10)
+
+```
+
+<br>
+
+**(2) Question:** Which 10 occupation titles (`OccupationData$Title`), with more 
+than 15 unique technologies, have the highest proportion (%) of "hot technologies" 
+(`TechnologySkills$HotTechnology`)?
+
+```{r cache = TRUE}
+
+OccupationData %>% 
+  left_join(TechnologySkills, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,`Hot Technology`) %>%
+  filter(`Hot Technology` == "Y")%>%
+  group_by(Title) %>%
+  summarize(Total_tech = n()) %>%
+  ungroup() %>%
+  mutate(Prop = Total_tech / sum(Total_tech),
+         Prop = percent(Prop))  %>%
+  arrange(-Total_tech) %>%
+  head(10)
+
+```
+
+<br>
+
+**(3) Question:** Which unique occupation titles (`OccupationData$Title`) have 
+"R" listed as a technology example (`TechnologySkills$Example`)? 
+
+```{r cache = TRUE}
+
+OccupationData %>% 
+  left_join(TechnologySkills, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,Example) %>%
+  filter(Example == "R") 
+
+
+```
+
+<br>
+
+**(4) Question:** Which alternate occupation titles (`AlternateTitles`) have "R" 
+listed as a technology example (`TechnologySkills$Example`)? 
+
+```{r cache = TRUE}
+
+AlternateTitles %>% 
+  left_join(TechnologySkills, 
+            by = "O*NET-SOC Code") %>%
+  select(`Alternate Title`,Example) %>%
+  filter(Example == "R") 
+
+```
+
+<br>
+
+**(5) Question:** Which top 25 occupation titles (`OccupationData$Title`) have 
+the highest level of "Independence" (`Element Name`) according to `WorkValues`?
+
+```{r eval=FALSE}
+
+OccupationData %>% 
+  left_join(WorkValues, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,`Element Name`, `Data Value`) %>%
+  filter(`Element Name` == "Independence") %>%
+  arrange(-`Data Value`) %>%
+  head(25)
+
+```
+
+<br>
+
+**(6) Question:** Which top 25 occupation titles (`OccupationData$Title`) have 
+the highest level of "Persistence" (`Element Name`) according to `WorkStyles`?
+
+```{r eval=FALSE}
+
+OccupationData %>% 
+  left_join(WorkStyles, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,`Element Name`, `Data Value`) %>%
+  filter(`Element Name` == "Persistence") %>%
+  arrange(-`Data Value`) %>%
+  head(25)
+```
+
+<br>
+
+**(7) Question:** According to Holland Codes, "Realistic" describes people who 
+like to work with things, requiring "motor coordination, skill, and strength".
+Which top 20 occupation titles (`OccupationData$Title`) have the highest rating 
+in "Realistic" scores (`Element Name`) according to `Interests`?
+
+```{r cache = T}
+
+OccupationData %>% 
+  left_join(Interests, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,`Element Name`, `Data Value`) %>%
+  filter(`Element Name` == "Realistic") %>%
+  arrange(-`Data Value`) %>%
+  head(20)
+
+```
+
+<br>
+
+**(8) Question:** Again, per Holland Codes, "Investigative" describes people who 
+like to work with ideas, preferring observation over action and facts over 
+feelings. Which top 20 occupation titles (`OccupationData$Title`) have the 
+highest rating in "Investigative" scores (`Element Name`) according to `Interests`?
+
+```{r cache = T}
+
+OccupationData %>% 
+  left_join(Interests, 
+            by = "O*NET-SOC Code") %>%
+  select(Title,`Element Name`, `Data Value`) %>%
+  filter(`Element Name` == "Investigative") %>%
+  arrange(-`Data Value`) %>%
+  head(20)
+
+```
+
+<br>
+
+**(9) Question:** Job Zones loosely classify how advanced one typically must be 
+as an occupational incumbent. How many unique occupation titles 
+(`OccupationData$Title`) are classified in each `Job Zone` (`JobZones`)? 
+
+```{r eval=FALSE}
+
+OccupationData %>% 
+  left_join(JobZones, 
+            by = "O*NET-SOC Code") %>%
+  select(Title, `Job Zone`) %>%
+  group_by(`Job Zone`) %>%
+  summarize(Title=n())
+```
+
+<br>
+
+**(10) Question:** Of occupation titles (`OccupationData$Title`) that list "R" 
+as the `Example` in `TechnologySkills`, what proportion is in each Job Zone 
+(`JobZones`)?
+
+```{r eval=FALSE}
+
+OccupationData %>% 
+  left_join(TechnologySkills, 
+            by = "O*NET-SOC Code") %>%
+  filter(Example == "R") %>%
+  left_join(JobZones,
+             by = "O*NET-SOC Code") %>%
+  select(Title,`Job Zone`) %>%
+  group_by(`Job Zone`) %>%
+  summarize(Title=n()) %>%
+  ungroup() %>%
+  mutate(prop = Title / sum(Title))
+
+```
+
+<br>
+<br>
+<br>
+
+## Part 2: Joins & Salary Predictions
+
+The following challenges require 3-4 merged tables and incorporate data from the 
+U.S. Bureau of Labor Statistics' 2021
+[Occupational Employment and Wage Statistics](https://www.bls.gov/oes/current/oes_nat.htm)
+which, like other federal agencies, uses unique SOC codes for each occupation.
+
+<br>
+
+The following commands will read in BLS data and rename and reformat the columns 
+to match O*NET.
+
+```{r cache = TRUE, message = FALSE, warning = FALSE}
+
+url <- paste0("https://raw.githubusercontent.com/DS4PS/ays-r-cod",
+              "ing-sum-2022/main/labs/bls_occupation_salaries.csv")
+
+Salaries <- read_csv(url, 
+                     col_select = c("O*NET-SOC Code" = "OCC_CODE", 
+                                    "Title" = "OCC_TITLE", 
+                                    "Median" = "A_MEDIAN")) %>% 
+  mutate(`O*NET-SOC Code` = gsub(x = `O*NET-SOC Code`, 
+                                 pattern = "$", 
+                                 replacement = "\\.00"),
+         Median = gsub(x = Median, 
+                       pattern = ",", 
+                       replacement = ""),
+         Median = as.numeric(Median))
+
+```
+
+<br>
+
+**Note:** There is one key distinction between O*NET and BLS SOC codes. The 
+[2019 O*NET Taxonomy](https://www.onetcenter.org/taxonomy.html) features even 
+more detailed profiles than typical federal agencies. Some more detailed O*NET 
+occupation profiles will not successfully merge with BLS occupations.
+
+<br>
+
+**(1) Question:** Join the O*NET `OccupationData` and BLS `Salaries` tables. 
+Then, filter out any occupations with an `NA` value in variable `Median`.
+Store this new table as object `Common`. How many occupations have
+salary data available from BLS?
+
+
+```{r cache = TRUE}
+
+ OccupationData %>% 
+  left_join(Salaries, 
+            by = c("O*NET-SOC Code","Title")) %>%
+  select(Title, Median) %>%
+  filter(!is.na(Median))
+
+Common <- OccupationData %>% 
+  left_join(Salaries, 
+            by = c("O*NET-SOC Code","Title")) %>%
+  filter(!is.na(Median))
+
+  
+
+```
+
+Use basic `dplyr` verbs to answer each question.
+
+<br>
+
+**(2) Question:** Join new object `Common` with object `Interests`. Note that 
+each interest is in `Element Name` and each interest rating (on a 7-point scale) 
+is listed in `Data Value`. In effect, we can now associate each "interest" (e.g. 
+artistic, social, enterprising) with median annual salaries.
+
+Use the `lm()` function with formula `Median ~ Element Name` to print the 
+coefficients of a simple linear model. Which two element names (not "High 
+Points") are most associated with higher salaries?
+
+
+```{r cache = TRUE}
+
+options(scipen = 999)
+
+dat <- Common %>% 
+  left_join(Interests, 
+            by = "O*NET-SOC Code") 
+
+lm(formula=Median ~ `Element Name`,data=dat)
+
+
+```
+**Conventional** and **Enterprising** are most associated with higher salaries.
+<br>
+
+**(3) Question:** Now join `Common` with `TechnologySkills`. Filter occupations 
+to only include the following technologies in `Example`, which have been 
+provided for you in object `tech`: 
+
+* R
+* C
+* Python
+* JavaScript
+* Microsoft Excel
+* Spreadsheet software
+* SAS statistical software
+* Hypertext markup language HTML
+
+Group by technologies (`Example`) and determine the following summaries:
+
+* Average value for `Median` (annual salary)
+* Count for total occupations with said `tech` 
+
+```{r cache = TRUE}
+
+tech <- c("R",
+          "C++",
+          "Python",
+          "JavaScript",
+          "Microsoft Excel",
+          "Spreadsheet software",
+          "SAS statistical software",
+          "Hypertext markup language HTML")
+
+Common %>% 
+  left_join(TechnologySkills, 
+            by = "O*NET-SOC Code") %>%
+  filter(Example%in% tech) %>%
+  group_by(Example) %>%
+  summarize(Title=n(),
+            Avg_med = mean(Median))
+
+```
+
+<br>
+
+**(4) Question:** Please rate your own work values by providing a score from 
+`1` to `7` for the following value categories.
+
+* Achievement
+* Working Conditions
+* Recognition
+* Relationships
+* Support
+* Independence 
+
+A "7" indicates highest importance. A "1" indicates lowest importance. 
+A default of `3.5` has been provided as an example.
+
+```{r echo = TRUE}
+
+my_values <- tibble::tibble("Achievement"        = 6, 
+                            "Working Conditions" = 7,
+                            "Recognition"        = 5,
+                            "Relationships"      = 5,
+                            "Support"            = 6,
+                            "Independence"       = 5)
+
+```
+
+<br>
+
+**(5) Question:** Join objects `Common` and `WorkValues` and filter the 
+following values from variable `Element Name`:
+
+* "First Work Value High-Point"
+* "Second Work Value High-Point"
+* "Third Work Value High-Point"
+
+Then, use `select()` on the following variables:
+
+* "O*NET-SOC Code"
+* "Element Name" 
+* "Data Value" 
+* "Median"
+
+Pipe (`%>%`) your output into the following `tidyr` function:
+
+```{r eval = FALSE, include = TRUE}
+
+work_values <- c("First Work Value High-Point",
+"Second Work Value High-Point",
+"Third Work Value High-Point")
+
+ Common %>% 
+  left_join(WorkValues, 
+            by = "O*NET-SOC Code") %>%
+  filter(`Element Name`%in% work_values) %>%
+  select(`O*NET-SOC Code`,`Element Name`,`Data Value`,Median) %>%
+  tidyr::pivot_wider(names_from = "Element Name", 
+                   values_from = "Data Value")
+
+
+```
+
+<br>
+
+Lastly, use function `lm()` and `predict()` to estimate your salary based on 
+your work values! 
+
+Make sure to set `eval = TRUE` for the following to run:
+
+```{r eval = TRUE, include = TRUE, message = FALSE, warning = FALSE}
+
+values <- c("Achievement", 
+            "Working Conditions",
+                            "Recognition",
+                            "Relationships",
+                            "Support",
+                            "Independence" )
+
+commons<- Common %>% 
+  left_join(WorkValues, 
+            by = "O*NET-SOC Code") %>%
+  filter(`Element Name`%in% values) %>%
+  select(`O*NET-SOC Code`,`Element Name`,`Data Value`,Median) %>%
+  tidyr::pivot_wider(names_from = "Element Name", 
+                   values_from = "Data Value")
+
+my_model <- lm(formula = Median ~ 
+                 Achievement +
+                 `Working Conditions` +
+                 Recognition + 
+                 Relationships + 
+                 Support + 
+                 Independence, 
+               data = commons)
+
+summary(my_model)
+
+predict(object = my_model, newdata = my_values)
+
+```

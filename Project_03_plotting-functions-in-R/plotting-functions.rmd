@@ -1,0 +1,265 @@
+---
+title: 'Lab 03 - Graphics'
+author: 'Kosar'
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: readable
+    df_print: paged
+    highlight: tango
+---
+
+```{r include = FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      fig.width = 10, 
+                      fig.height = 8)
+
+library( dplyr )
+library( pander )
+
+```
+
+<br>
+<br>
+
+# Introduction
+
+This lab provides a step-by-step replication of the following [NYT Graphic](https://archive.nytimes.com/www.nytimes.com/interactive/2013/03/29/sports/baseball/Strikeouts-Are-Still-Soaring.html?_r=0&ref=baseball) using core graphics in R. 
+
+<br>
+
+![](https://raw.githubusercontent.com/DS4PS/cpp-526-fall-2019/master/LABS/images/strikeouts.png)
+
+<br>
+<br>
+
+# Data
+
+The data comes from the Lahman baseball data package. 
+
+The **Teams** dataset contains season statistics for each baseball team from 
+the late 1800s onward. 
+
+
+```{r}
+
+library(Lahman)
+data(Teams)
+
+```
+
+
+```{r echo = FALSE}
+
+head(Teams)
+
+```
+
+<br>
+
+Summary statistics required for this graphic are calculated as follows. 
+
+**Note:** *The years in the dataset exceed the years shown in the graphic and require filtering.*
+
+```{r}
+
+ave.so <- Teams$SO / Teams$G
+year <- Teams$yearID
+
+ave.so.min <- min(ave.so, na.rm = TRUE)
+ave.so.max <- max(ave.so, na.rm = TRUE)           # Plot window dimensions
+
+
+league.ave <- tapply(X = ave.so, 
+                     INDEX = as.factor(year), 
+                     FUN = "mean", 
+                     na.rm = TRUE)                # League average/season
+
+league.year <- as.numeric(names(league.ave))
+
+
+index<- which(year >= 1900 & year <= 2012)
+
+year <- year[index]
+ave.so <- ave.so[index]
+
+index<- which(league.year >= 1900 & league.year <= 2012)
+
+league.year <- league.year[index]
+league.ave <- league.ave[index]
+
+```
+
+
+<br>
+<br>
+
+## Replication
+
+
+```{r, fig.width=12}
+
+plot.new()
+
+plot.window(xlim = c(1900, 2012), 
+            ylim = c(ave.so.min, 
+                     ave.so.max))   
+
+points(x = year, 
+       y = ave.so,
+       col = "gray85",              
+       pch = 16,                    
+       cex = 0.5)       
+axis(side = 1,                      
+     lwd = 2,                       
+     hadj = -0.1,                   
+     padj = -1,                     
+     at = seq(from = 1900, 
+              to = 2010, 
+              by = 10))             
+axis(side = 4,                     
+     lwd = 0,                       
+     las = 1,                       
+     col.axis = "gray85",          
+     at = seq(from = 0,             
+              to = 9, 
+              by = 1))
+
+abline(h=1:9,
+       lty="dashed", col="gray85", cex=1) 
+
+mtext(text ="Strikeouts on the Rise",
+      adj=0,
+      family="serif",
+      cex=1.7)
+mtext(text = "There were more strikeouts in 2012 than any other time in major league history",
+      adj=0,
+      family="serif",
+      cex=1.1,
+      padj = 2)
+
+lines(x=league.year,
+      y=league.ave,
+      type="l",
+      col="deepskyblue4",
+      lwd=1)
+
+points(x=league.year,
+      y=league.ave,
+      col="deepskyblue4",
+      cex=1,
+      pch=16)
+
+text(x=1924, y=1.9,labels="League average\n 1924",font=2, cex=0.7)
+text(x=1924, y=2.42,labels="2.7",font=2, cex=1.5,col="deepskyblue4")
+
+points(x=1924,
+       y=2.7,
+       col="gray50",
+       cex=1.5,
+       lwd=0.5)
+
+text(x=2012,y=8.3,labels="2012\n League average",font=2, cex=0.7)
+text(x=2012, y=7.8,labels="7.5",font=2, cex=1.5,col="deepskyblue4")
+
+points(x=2012,
+       y=7.5,
+       col="gray50",
+       cex=1.5,
+       lwd=0.5)
+
+text(1917, 1.5,"U.S. enters\n World War I", pos=1, cex=0.7, col="gray80")
+
+segments(x0=1917,
+         x1=1917,
+         y0=3.7,
+         y1=1.3,
+         col="gray80")
+
+text(1946, 2.1,"Players return\n from  World War II", pos=1, cex=0.7, col="gray80")
+
+segments(x0=1946,
+         x1=1946,
+         y0=4,
+         y1=2,
+         col="gray80")
+
+text(1963, 3.2,"Strike zone enlarged\n from  1963-68", pos=1, cex=0.7, col="gray80")
+
+segments(x0=1963,
+         x1=1963,
+         y0=5.9,
+         y1=2.9,
+         col="gray80")
+
+text(1969, 8,"Pitching had become so dominant\n in the 1960s that the mound\n was lowered in 1969.", pos=3, cex=0.7, col="gray80")
+
+segments(x0=1969,
+         x1=1969,
+         y0=8,
+         y1=6,
+         col="gray80")
+
+text(1972, 2.1,"Designated hitter\n rule took effect", pos=1, cex=0.7, col="gray80")
+
+segments(x0=1972,
+         x1=1972,
+         y0=5.1,
+         y1=1.9,
+         col="gray80")
+
+text(2008, 4,"Mitchell report\n on steroids.", pos=1, cex=0.7, col="gray80")
+
+segments(x0=2008,
+         x1=2008,
+         y0=7,
+         y1=4,
+         col="gray80")
+
+mtext(text ="Strikeouts per game per team",
+      adj=0,
+      font=2,
+      cex=0.9,
+      padj = 8)
+
+
+mtext(text ="(by batters)",
+      adj=0.22,
+      col="gray60",
+      cex=0.9,
+      padj = 8) 
+
+mtext(text ="League average",
+      col="deepskyblue4",
+      adj=0.06,
+      cex=0.9,
+      padj = 10)
+
+segments(x0=0,
+         x1=1900.5,
+         y0=8.6,
+         y1=8.6,
+         col="deepskyblue4",
+         lwd=2.5)
+
+mtext(text ="Choose a team",
+      col="darkgoldenrod3",
+      adj=0.06,
+      cex=0.9,
+      padj = 12.5)
+
+segments(x0=0,
+         x1=1900.5,
+         y0=8.1,
+         y1=8.1,
+         col="darkgoldenrod3",
+         lwd=2.5)
+
+```
+
+<br>
+<br>
+

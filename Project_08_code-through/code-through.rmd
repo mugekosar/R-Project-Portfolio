@@ -1,0 +1,825 @@
+---
+title: "Predicting Flight Departure Delays"
+author: "Muge Kosar"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    theme: cerulean
+    df_print: paged
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    code_folding: hide
+---
+
+```{r include = FALSE, cache = FALSE}
+
+# SET GLOBAL KNITR OPTIONS
+
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      fig.width = 10, 
+                      fig.height = 8)
+
+
+
+# LOAD PACKAGES
+
+library(pander)
+library(kableExtra)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(lattice)
+library(caret)
+library("RColorBrewer")
+library(class)
+library(e1071)
+library(caTools)
+
+options(scipen = 999)
+options(dplyr.summarise.inform = FALSE)
+
+setwd("C:/MUGE/Coding in R/code through")
+dataset <- read_excel("dataset.xlsx", sheet = "flights")
+
+```
+
+<br>
+<br>
+
+# INTRODUCTION
+
+This code through analyzes flight dataset and predicts the flight delay using regression models. 
+
+From this code through it can be observed how to wrangle, clean and transform dataset to prepare it for the models that is used. 
+
+This code through also introduces regression models and explains results by confusion matrixes which visualizes and summarizes the performance of a classification algorithm.
+
+
+## Content Overview
+
+- First, I will introduce the dataset and variables which I collected.
+
+- Second, in the explanatory data analysis section, it can be observed that total minutes of the delayings by its reasons for each airline and percentage of departure delays by day and on weekends for each airlines.
+
+- Additionally, three regression models are applied which are Logistic Regression, KNN and Naive Bayes. From the results of regression models prediction of flight delays will be made and performance of those models will be analyzed. 
+
+<br>
+
+# DATA
+
+The dataset is raw data collected from [Bureau Transportation Statistics](https://www.transtats.bts.gov/) which collects and publishes comprehensive transportation statistics. The dataset contains all the flights from Atlanta airport in the months of January 2022 and April 2022 with selected airlines which are Delta Airlines, Spirit Airlines, and Frontier Airlines.
+
+There are around 70,855 rows in this dataset and 17 variables indicating the features of the flight including information about carrier code, month, day, flight number, origin airport, destination airport, airplane information, departure time, arrival time, and delays (related to departure, weather, security etc.). 
+
+
+**Lets check the variables:**
+
+```{r echo=FALSE}
+
+head(dataset)
+
+```
+
+*For your reference, the airline abbreviations used in the dataset refer as follows:*
+
+- *NK: Spirit Airlines*
+- *DL: Delta Airlines*
+- *F9: Frontier Airlines*
+
+<br>
+
+## Exploratory Data Analysis
+
+In this section, you will be able to see the trend on which day of the week and weekends contains the most flight delays per airline.
+
+First, lets add **Weekend** variable into the dataset:
+
+<mark >I used grepl() function which searches for matches of certain character pattern and returns TRUE if a string contains the pattern, otherwise FALSE. Since Saturday and Sunday starts with "S", I adjusted the code according to this condition and added Weekend variable with following code:</mark>
+
+```{r}
+
+dataset$Weekend <- grepl("S.+",weekdays(dataset$`Date (MM/DD/YYYY)`))
+
+dataset %>%
+  mutate(Weekend=grepl("S.+",weekdays(dataset$`Date (MM/DD/YYYY)`)))
+
+```
+
+<br>
+
+Second, lets check the **sum of all delay reasons per airline.** 
+
+<mark >To find this, I used pivot_longer function which is used to pivot a data frame from a wide format to a long format so that each column that has a "Delay" reason is pivoted into its own rows. After this, I used group by() and summarise() functions on carrier code and delay category to have sum of delays. Lastly, I plotted graph with ggplot package.</mark>
+
+
+```{r}
+
+dataset %>%
+  pivot_longer(cols=contains("Delay"),
+                    names_to='Delay Reasons',
+                    values_to='Delays') %>%
+  group_by(`Carrier Code`,`Delay Reasons`)%>%
+  summarise(Delays = sum(Delays))%>%
+ggplot(aes(x=Delays,y=`Delay Reasons`, fill=`Carrier Code` ))+
+  geom_col()+
+  labs(x="Sum of Departure Delays(mins) ",title = "Sum of Delays by Delay Reasons per Airline ")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif", color="black",size = 14, face = "bold"),
+    axis.title.y = element_text(family="serif", color="black",size = 14, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=16, face="bold"),
+    text=element_text(family="serif",size=14))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+
+
+```
+
+<br>
+
+**As we can see from the graph, it can be observed that the departure delay is highest number among all delays for each airline and delay security is the lowest one among all delays for each airline. Thus, I decided to focus on departure delay for this analysis**
+
+<br>
+
+Next, to analyze the flight departure delayings, I created **is_delay** variable which shows if the departure delay is 15 mins or greater than 15 mins, it will be considered as delay.
+
+<mark >I applied ifelse function to create a dummy variable which result 0 and 1. 1 means delays and 0 means non-delays.</mark>
+
+```{r}
+
+dataset$is_delay <- ifelse(dataset$`Departure delay (Minutes)`>= 15, 1,0)
+
+dataset %>%
+  mutate(is_delay=ifelse(dataset$`Departure delay (Minutes)`>= 15, 1,0))
+  
+```
+
+<br>
+
+Now, lets check the **percentage of departure delayings by day of the week for each airline:**
+
+<mark >I grouped dataset by airline and days and calculated percentage of the delays with count(),group_by() and sum() functions. Then I used ggplot to visualize the percentage of departure delays by days for each airline.</mark>
+
+```{r}
+ dataset %>% 
+  count(`Carrier Code`, Day, is_delay) %>% 
+  group_by(`Carrier Code`, Day) %>%
+  mutate(percent_delay = (n/sum(n)*100) %>% round(1)) %>% 
+  filter(is_delay==1) %>%
+  ggplot(aes(x = factor(Day), y = percent_delay, group=`Carrier Code`, color =`Carrier Code`)) + 
+  geom_line(size=1) +
+  labs(title = "Percentage of Departure Delays by the Days of the Week for Each Airline ",y="Percentage  of   Delays",x="Day of the Week", caption = "**1:Sun | 2:Mon | 3:Tue | 4:Wed | 5:Fri | 6:Sat | 7:Sun**")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(
+    axis.title.x = element_text(family="serif",color = "black", size = 10, face = "bold"),
+    axis.title.y = element_text(family="serif",color = "black", size = 10, face = "bold"),
+    plot.title = element_text(family="serif",color="black", size=14, face="bold"),
+    text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))+
+  theme(
+    legend.position = c(1, .1),
+    legend.justification = c("right", "bottom"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(fill = "white", colour = "black"))
+
+
+```
+<br>
+
+**The graph shows the highest percentage of departure delay is on Saturday for each airline. Among three airlines, mainly the lower percentage delay is in Delta Airlines. **
+
+<br>
+
+Lastly lets find out which airline has **the highest percentage of departure delay on weekend:**
+
+<mark >Again, to find which airline has the most percentage of departure delay on weekend, I grouped by darrier code and weekend variables and calculated percentage of delay with sum function. Then I created pie chart with ggplot().</mark>
+
+```{r}
+
+dataset %>% 
+  count(`Carrier Code`, Weekend, is_delay) %>% 
+  group_by(`Carrier Code`, Weekend) %>%
+  mutate(percent_delay = (n/sum(n)*100) %>% round(1)) %>% 
+  filter(is_delay==1 & Weekend==1) %>%
+ggplot(aes(x = "", y = percent_delay, fill = fct_inorder(`Carrier Code`))) +
+  geom_col(width = 1, color = 1) +
+  geom_text(aes(label = paste0(percent_delay, "%")),
+            position = position_stack(vjust = 0.5),
+            size=4,family="serif") +
+  coord_polar(theta = "y") +
+  labs(title="The percentage of Flight Departure Delays on Weekends per Airline")+
+  scale_fill_brewer(palette = "Pastel1")+
+  guides(fill = guide_legend(title = "Airlines")) +
+  theme_void()+
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5,vjust=-1),
+        text=element_text(family="serif"))+
+  theme(legend.text = element_text(family="serif",size = 10))+
+  theme(legend.title = element_text(family="serif",face = "bold",size=12))
+```
+**According to the pie chart, the highest percentage of departure delay on weekends is 28.4% at Frontier Airlines while the lowest percentage of departure delay on weekends is 19.7% at Delta Airlines. **
+
+<br>
+
+# METHODOLOGY
+
+To predict the flight delays, three methods is used: Logistic regression model, K- Nearest Neighbors Model (KNN), and Naïve Bayes.
+
+* Logistic regression estimates the probability of an event occurring, based on a given dataset of independent variables.
+* KNN uses proximity to make classifications or predictions about the grouping of an individual data point.
+* Naive Bayes probabilistic machine learning algorithm based on the Bayes Theorem, and used in a wide variety of classification tasks. 
+
+<br>
+
+## Data Preparation & Analysis
+
+
+<mark >Before starting regression models, to fit the models I applied lm() function. Then I applied summary() function to interpret the most important statistical values for the analysis.</mark> 
+
+```{r}
+
+correlation <-
+lm(formula = `Departure delay (Minutes)` ~ Month + Day + Weekend + `Flight Number`, data=dataset)
+summary(correlation)
+
+```
+
+
+**It can be observed from the outcome above, the variables that I will use are statistically significant.**
+
+<br>
+
+### Logistic Regression
+
+For logistic regression I will use following variables so that I selected those variables:
+
+```{r}
+
+log_reg <- dataset %>%
+select(`Carrier Code`, `Date (MM/DD/YYYY)`, Month, Day, Weekend, `Flight Number`, is_delay)
+
+head(log_reg)
+
+log_reg$is_delay <- as.factor(log_reg$is_delay)
+
+
+
+```
+
+<mark >The target variable which is is_delay converted into factor variable for the analysis.</mark>
+
+<br>
+
+First, the dataset is splited into train and test datasets as 70% of train set and 30% of test set with the following code:
+
+```{r}
+
+#Splitting
+
+set.seed(1234)
+index<-createDataPartition(log_reg$is_delay,p=0.7,list=FALSE)
+train<- log_reg[index,]
+test<- log_reg[-index,]
+
+table(train$is_delay)
+```
+
+
+<mark >set.seed() generate random numbers</mark>
+<mark >createDataPartition() function is used to split data as 0.7 train and 0.3 test dataset, then it is assigned as the name of train and test dataset.</mark>
+
+**The sample sizes are controlled by table() function; there are 40,316 non-delays and 9283 delays**
+
+<br>
+
+Next, to increase statistical power, sample sizes between delays and non-delays are balanced with the downSample() function which decreases the size of the majority class to be the same or closer to the minority class size by just taking out a random sample.
+
+```{r}
+
+#Downsample
+set.seed(111)
+traindown<-downSample(x=train[,-ncol(train)],
+                      y=train$is_delay)
+table(traindown$Class)
+
+```
+
+**As we can see there are 9283 delays and 9283 non-delays sample sizes.**
+
+<br>
+
+Then, logistic regression model is applied with dependent and independent variables and assigned as the name of modeldown with the following code:
+
+```{r}
+
+# Model
+glm(Class ~ `Carrier Code` + Month + Day + Weekend +  `Flight Number`, data=traindown, family=binomial(link = "logit"))
+
+modeldown <- glm(Class ~ `Carrier Code` + Month + Day + Weekend + `Flight Number`, data=traindown, family=binomial(link = "logit"))
+
+```
+
+After the model, predict() function is used to predict the flight departure delays and then threshold selected as 0.5 which means that it makes prediction for each row where that probability is greater than or equal to 0.5.
+
+```{r}
+
+# Predicting
+predicted <- predict(modeldown, test, type="response")
+
+#Threshold
+predicted <-ifelse(predicted> 0.5,1,0)
+
+predicted <- as.factor(predicted)
+
+
+```
+
+<mark >The class of "predicted" values converted to the factors for the analysis.</mark>
+
+<br>
+Lastly, **confusion matrix** is created with the following code:
+
+```{r}
+
+confusionMatrix(predicted, test$is_delay)
+
+```
+<br>
+
+*<mark >Confusion Matrix explained in the Findings section.</mark>*
+
+
+### KNN
+
+For KNN I will use following variables so that I selected those variables.
+```{r}
+
+knn <- dataset %>%
+select(`Carrier Code`, Month, Day, Weekend, `Flight Number`, is_delay)
+
+head(knn)
+
+knn$is_delay <- as.factor(knn$is_delay)
+knn$Weekend <- as.numeric(knn$Weekend)
+knn$`Carrier Code`  = as.numeric(as.factor(knn$`Carrier Code`))
+
+```
+
+<mark >The target variable which is is_delay converted into factor variable for the analysis.</mark>
+
+<br>
+
+First, the dataset is splited into train and test datasets as 70% of train set and 30% of test set with the following code:
+
+```{r}
+
+#Splitting
+
+set.seed(1234)
+to_take <- floor(0.70* nrow(knn))
+
+set.seed(111)
+train_idx <- sample(seq_len(nrow(knn)), size = to_take)
+train2 <- knn[train_idx, ]
+test2 <- knn[-train_idx, ]
+
+table(train2$is_delay)
+
+train2$`Carrier Code` <- as.numeric(as.factor(train2$`Carrier Code`))
+test2$`Carrier Code` <- as.numeric(as.factor(test2$`Carrier Code`))
+
+train_scale <- scale(train2[, 1:5])
+test_scale <- scale(test2[, 1:5])
+
+```
+
+
+<mark >set.seed() generate random numbers</mark>
+<mark >With createDataPartition() function is used to split data as 0.7 train and 0.3 test dataset, then it is assigned as the name of train and test dataset.</mark>
+
+**The sample sizes are controlled by table() function; there are 40,353 non-delays and 9245 delays**
+
+<br>
+
+Next, to increase statistical power, sample sizes between delays and non-delays are balanced with the downSample() function which decreases the size of the majority class to be the same or closer to the minority class size by just taking out a random sample.
+
+```{r}
+
+#Downsample
+set.seed(111)
+traindown2<-downSample(x=train_scale[,-ncol(train_scale)],
+                      y=train2$is_delay)
+table(traindown2$Class)
+
+```
+
+
+**As we can see there are 9245 delays and 9245 non-delays sample sizes.**
+
+<br>
+
+Then, knn model is applied with dependent and independent variables and assigned as the name of classifier_knn with the following code:
+
+```{r}
+
+# Model
+
+classifier_knn <- knn(train = traindown2,
+                      test = test_scale,
+                      cl = traindown2$Class,
+                      k = 1)
+
+```
+
+After model, **confusion matrix** is created with the following code:
+
+```{r}
+
+#Confusion Matrix
+confusionMatrix(classifier_knn, test2$is_delay)
+
+
+```
+<br>
+
+*<mark >Confusion Matrix explained in the Findings section.</mark>*
+
+
+### Naive Bayes
+
+For Naive Bayes I will use following variables so that I selected those variables.
+
+```{r}
+
+NB <- dataset %>%
+select(`Carrier Code`, Month, Day, Weekend, `Flight Number`, is_delay)
+
+NB$is_delay <- as.factor(NB$is_delay)
+NB$Weekend <- as.numeric(NB$Weekend)
+NB$`Carrier Code`  = as.numeric(as.factor(NB$`Carrier Code`))
+   
+head(NB)
+
+```
+
+
+<mark >The target variable which is is_delay converted into factor variable for the analysis.</mark>
+
+<br>
+
+First, the dataset is splited into train and test datasets as 70% of train set and 30% of test set with the following code:
+
+```{r}
+
+#Splitting
+
+set.seed(1234)
+sample <- sample(c(TRUE, FALSE), nrow(NB), replace=TRUE, prob=c(0.7,0.3))
+train3 <- NB[sample, ]
+test3 <- NB[!sample, ]
+
+table(train3$is_delay)
+
+```
+
+
+<mark >set.seed() generate random numbers</mark>
+<mark >With createDataPartition() function is used to split data as 0.7 train and 0.3 test dataset, then it is assigned as the name of train and test dataset.</mark>
+
+**The sample sizes are controlled by table() function; there are 40,162 non-delays and 9299 delays**
+
+<br>
+
+Next, to increase statistical power, sample sizes between delays and non-delays are balanced with the downSample() function which decreases the size of the majority class to be the same or closer to the minority class size by just taking out a random sample.
+
+```{r}
+
+#Downsample
+set.seed(111)
+traindown3<-downSample(x=train3[,-ncol(train3)],
+                      y=train3$is_delay)
+table(traindown3$Class)
+
+```
+
+**As we can see there are 9299 delays and 9299 non-delays sample sizes.**
+
+<br>
+
+Then, Naive Bayes model is applied with dependent and independent variables and assigned as the name of classifier_cl with the following code:
+
+```{r}
+
+# Fitting Naive Bayes Model
+# to training dataset
+
+set.seed(120)  # Setting Seed
+classifier_cl <- naiveBayes(Class ~ ., data = traindown3)
+classifier_cl
+ 
+
+```
+
+
+After the model, predict() function applied on test dataset to predict the flight departure delays:
+
+```{r}
+
+# Predicting on test dataset
+y_pred <- predict(classifier_cl, newdata = test3)
+
+
+```
+
+
+Lastly, **confusion matrix** is created with the following code:
+
+```{r}
+
+# Confusion Matrix
+cm3 <- table(y_pred, test3$is_delay)
+
+# Model Evaluation
+cm3 <- confusionMatrix(cm3)
+cm3
+
+```
+<br>
+
+*<mark >Confusion Matrix explained in the Findings section.</mark>*
+
+<br>
+
+# FINDINGS
+
+## Logistic Regression
+
+```{r}
+
+#Confusion Matrix
+
+cm <- confusionMatrix(predicted, test$is_delay)
+
+draw_confusion_matrix <- function(cm) {
+
+  total <- sum(cm$table)
+  res <- as.numeric(cm$table)
+
+  # Generate color gradients. Palettes come from RColorBrewer.
+  greenPalette <- c("#F7FCF5","#E5F5E0","#C7E9C0","#A1D99B","#74C476","#41AB5D","#238B45","#006D2C","#00441B")
+  redPalette <- c("#FFF5F0","#FEE0D2","#FCBBA1","#FC9272","#FB6A4A","#EF3B2C","#CB181D","#A50F15","#67000D")
+  getColor <- function (greenOrRed = "green", amount = 0) {
+    if (amount == 0)
+      return("#FFFFFF")
+    palette <- greenPalette
+    if (greenOrRed == "red")
+      palette <- redPalette
+    colorRampPalette(palette)(100)[10 + ceiling(90 * amount / total)]
+  }
+
+  # set the basic layout
+  layout(matrix(c(1,1,2)))
+  par(mar=c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+  title('CONFUSION MATRIX - Logistic Regression', cex.main=2)
+
+  # create the matrix 
+  classes = colnames(cm$table)
+  rect(150, 430, 240, 370, col=getColor("green", res[1]))
+  text(195, 435, classes[1], cex=1.2)
+  rect(250, 430, 340, 370, col=getColor("red", res[3]))
+  text(295, 435, classes[2], cex=1.2)
+  text(125, 370, 'Predicted', cex=1.3, srt=90, font=2)
+  text(245, 450, 'Actual', cex=1.3, font=2)
+  rect(150, 305, 240, 365, col=getColor("red", res[2]))
+  rect(250, 305, 340, 365, col=getColor("green", res[4]))
+  text(140, 400, classes[1], cex=1.2, srt=90)
+  text(140, 335, classes[2], cex=1.2, srt=90)
+
+  # add in the cm results
+  text(195, 400, res[1], cex=1.6, font=2, col='white')
+  text(195, 335, res[2], cex=1.6, font=2, col='white')
+  text(295, 400, res[3], cex=1.6, font=2, col='white')
+  text(295, 335, res[4], cex=1.6, font=2, col='white')
+
+  # add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt='n', yaxt='n')
+  text(10, 85, names(cm$byClass[1]), cex=1.2, font=2)
+  text(10, 70, round(as.numeric(cm$byClass[1]), 3), cex=1.2)
+  text(30, 85, names(cm$byClass[2]), cex=1.2, font=2)
+  text(30, 70, round(as.numeric(cm$byClass[2]), 3), cex=1.2)
+  text(50, 85, names(cm$byClass[5]), cex=1.2, font=2)
+  text(50, 70, round(as.numeric(cm$byClass[5]), 3), cex=1.2)
+  text(70, 85, names(cm$byClass[6]), cex=1.2, font=2)
+  text(70, 70, round(as.numeric(cm$byClass[6]), 3), cex=1.2)
+  text(90, 85, names(cm$byClass[7]), cex=1.2, font=2)
+  text(90, 70, round(as.numeric(cm$byClass[7]), 3), cex=1.2)
+
+  # add in the accuracy information 
+  text(30, 35, names(cm$overall[1]), cex=1.5, font=2)
+  text(30, 20, round(as.numeric(cm$overall[1]), 3), cex=1.4)
+  text(70, 35, names(cm$overall[2]), cex=1.5, font=2)
+  text(70, 20, round(as.numeric(cm$overall[2]), 3), cex=1.4)
+}
+
+draw_confusion_matrix(cm)
+ 
+
+```
+
+*<mark >Precision rate shows how many of the correctly predicted delayings actually turned out to be delaying. Sensitivity shows how many of the actual delayings I was able to predict correctly with the model while specificity shows how many of the non-delays were correctly classified by model.</mark>*
+
+**According to the confusion matrix of logistic regression, the model's accuracy is 55% which is average. 84% of the correctly predicted delayings turned out to be delaying. Whereas 56% of the delayings were successfully predicted by the model. That is average!**
+
+## KNN
+
+```{r}
+
+cm2 <- confusionMatrix(classifier_knn, test2$is_delay)
+
+draw_confusion_matrix <- function(cm2) {
+
+  total <- sum(cm2$table)
+  res <- as.numeric(cm2$table)
+
+  # Generate color gradients. Palettes come from RColorBrewer.
+  greenPalette <- c("#F7FCF5","#E5F5E0","#C7E9C0","#A1D99B","#74C476","#41AB5D","#238B45","#006D2C","#00441B")
+  redPalette <- c("#FFF5F0","#FEE0D2","#FCBBA1","#FC9272","#FB6A4A","#EF3B2C","#CB181D","#A50F15","#67000D")
+  getColor <- function (greenOrRed = "green", amount = 0) {
+    if (amount == 0)
+      return("#FFFFFF")
+    palette <- greenPalette
+    if (greenOrRed == "red")
+      palette <- redPalette
+    colorRampPalette(palette)(100)[10 + ceiling(90 * amount / total)]
+  }
+
+  # set the basic layout
+  layout(matrix(c(1,1,2)))
+  par(mar=c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+  title('CONFUSION MATRIX - KNN', cex.main=2)
+
+  # create the matrix 
+  classes = colnames(cm2$table)
+  rect(150, 430, 240, 370, col=getColor("green", res[1]))
+  text(195, 435, classes[1], cex=1.2)
+  rect(250, 430, 340, 370, col=getColor("red", res[3]))
+  text(295, 435, classes[2], cex=1.2)
+  text(125, 370, 'Predicted', cex=1.3, srt=90, font=2)
+  text(245, 450, 'Actual', cex=1.3, font=2)
+  rect(150, 305, 240, 365, col=getColor("red", res[2]))
+  rect(250, 305, 340, 365, col=getColor("green", res[4]))
+  text(140, 400, classes[1], cex=1.2, srt=90)
+  text(140, 335, classes[2], cex=1.2, srt=90)
+
+  # add in the cm2 results
+  text(195, 400, res[1], cex=1.6, font=2, col='white')
+  text(195, 335, res[2], cex=1.6, font=2, col='white')
+  text(295, 400, res[3], cex=1.6, font=2, col='white')
+  text(295, 335, res[4], cex=1.6, font=2, col='white')
+
+  # add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt='n', yaxt='n')
+  text(10, 85, names(cm2$byClass[1]), cex=1.2, font=2)
+  text(10, 70, round(as.numeric(cm2$byClass[1]), 3), cex=1.2)
+  text(30, 85, names(cm2$byClass[2]), cex=1.2, font=2)
+  text(30, 70, round(as.numeric(cm2$byClass[2]), 3), cex=1.2)
+  text(50, 85, names(cm2$byClass[5]), cex=1.2, font=2)
+  text(50, 70, round(as.numeric(cm2$byClass[5]), 3), cex=1.2)
+  text(70, 85, names(cm2$byClass[6]), cex=1.2, font=2)
+  text(70, 70, round(as.numeric(cm2$byClass[6]), 3), cex=1.2)
+  text(90, 85, names(cm2$byClass[7]), cex=1.2, font=2)
+  text(90, 70, round(as.numeric(cm2$byClass[7]), 3), cex=1.2)
+
+  # add in the accuracy information 
+  text(30, 35, names(cm2$overall[1]), cex=1.5, font=2)
+  text(30, 20, round(as.numeric(cm2$overall[1]), 3), cex=1.4)
+  text(70, 35, names(cm2$overall[2]), cex=1.5, font=2)
+  text(70, 20, round(as.numeric(cm2$overall[2]), 3), cex=1.4)
+}
+
+draw_confusion_matrix(cm2)
+
+```
+
+**According to the confusion matrix of KNN, the model's accuracy is 54% which is average. 80% of the correctly predicted delayings turned out to be delaying. Whereas 58% of the delayings were successfully predicted by the model. That is also average!**
+
+## Naive Bayes
+
+```{r}
+
+draw_confusion_matrix <- function(cm3) {
+
+  total <- sum(cm3$table)
+  res <- as.numeric(cm3$table)
+
+  # Generate color gradients. Palettes come from RColorBrewer.
+  greenPalette <- c("#F7FCF5","#E5F5E0","#C7E9C0","#A1D99B","#74C476","#41AB5D","#238B45","#006D2C","#00441B")
+  redPalette <- c("#FFF5F0","#FEE0D2","#FCBBA1","#FC9272","#FB6A4A","#EF3B2C","#CB181D","#A50F15","#67000D")
+  getColor <- function (greenOrRed = "green", amount = 0) {
+    if (amount == 0)
+      return("#FFFFFF")
+    palette <- greenPalette
+    if (greenOrRed == "red")
+      palette <- redPalette
+    colorRampPalette(palette)(100)[10 + ceiling(90 * amount / total)]
+  }
+
+  # set the basic layout
+  layout(matrix(c(1,1,2)))
+  par(mar=c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+  title('CONFUSION MATRIX - Naive Bayes', cex.main=2)
+
+  # create the matrix 
+  classes = colnames(cm3$table)
+  rect(150, 430, 240, 370, col=getColor("green", res[1]))
+  text(195, 435, classes[1], cex=1.2)
+  rect(250, 430, 340, 370, col=getColor("red", res[3]))
+  text(295, 435, classes[2], cex=1.2)
+  text(125, 370, 'Predicted', cex=1.3, srt=90, font=2)
+  text(245, 450, 'Actual', cex=1.3, font=2)
+  rect(150, 305, 240, 365, col=getColor("red", res[2]))
+  rect(250, 305, 340, 365, col=getColor("green", res[4]))
+  text(140, 400, classes[1], cex=1.2, srt=90)
+  text(140, 335, classes[2], cex=1.2, srt=90)
+
+  # add in the cm3 results
+  text(195, 400, res[1], cex=1.6, font=2, col='white')
+  text(195, 335, res[2], cex=1.6, font=2, col='white')
+  text(295, 400, res[3], cex=1.6, font=2, col='white')
+  text(295, 335, res[4], cex=1.6, font=2, col='white')
+
+  # add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt='n', yaxt='n')
+  text(10, 85, names(cm3$byClass[1]), cex=1.2, font=2)
+  text(10, 70, round(as.numeric(cm3$byClass[1]), 3), cex=1.2)
+  text(30, 85, names(cm3$byClass[2]), cex=1.2, font=2)
+  text(30, 70, round(as.numeric(cm3$byClass[2]), 3), cex=1.2)
+  text(50, 85, names(cm3$byClass[5]), cex=1.2, font=2)
+  text(50, 70, round(as.numeric(cm3$byClass[5]), 3), cex=1.2)
+  text(70, 85, names(cm3$byClass[6]), cex=1.2, font=2)
+  text(70, 70, round(as.numeric(cm3$byClass[6]), 3), cex=1.2)
+  text(90, 85, names(cm3$byClass[7]), cex=1.2, font=2)
+  text(90, 70, round(as.numeric(cm3$byClass[7]), 3), cex=1.2)
+
+  # add in the accuracy information 
+  text(30, 35, names(cm3$overall[1]), cex=1.5, font=2)
+  text(30, 20, round(as.numeric(cm3$overall[1]), 3), cex=1.4)
+  text(70, 35, names(cm3$overall[2]), cex=1.5, font=2)
+  text(70, 20, round(as.numeric(cm3$overall[2]), 3), cex=1.4)
+}
+
+draw_confusion_matrix(cm3)
+
+```
+**According to the confusion matrix of Naive Bayes, the model's accuracy is 70% which is average. 83% of the correctly predicted delayings turned out to be delaying. Whereas 79% of the delayings were successfully predicted by the model. That is good! However, specificity rate is 28% which is low.**
+
+<br>
+<br>
+
+# CONCLUSION
+
+According to the analysis in *Exploratory Data Analysis* section, the **lowest percentage of departure delay is at Delta Airlines** and the **highest percentage of departure delay is on Saturday for each airline.**
+
+Overall, between those three models, the more accurate model is **Naive Bayes** with 72% rate but it failed in specificity rate that is low. Between KNN and logistic regression models, **logistic regression has better precision and accuracy level.**
+
+<br>
+<br>
+
+# FURTHER RESOURCES
+
+Learn more about regression model applications using R with the following:
+
+* Resource I [Logistic Regression](https://rpubs.com/aymansir/usflightdelay)
+
+* Resource II [KNN](https://www.geeksforgeeks.org/k-nn-classifier-in-r-programming/)
+
+* Resource III [Naive Bayes](https://www.r-bloggers.com/2021/04/naive-bayes-classification-in-r/ )
+
+<br>
+<br>
+
+# WORKS CITED
+
+This code through references and cites the following sources:
+
+* Modeling with R (2019). Source I. [DownSample](https://www.r-bloggers.com/2019/04/methods-for-dealing-with-imbalanced-data/amp/)
+
+* Cybernetic (2017). Source II. [Confusion Matrix](https://stackoverflow.com/questions/23891140/r-how-to-visualize-confusion-matrix-using-the-caret-package)
+
+* Henderson,C. (2021). Source III. [Flight Delay Analysis](https://rpubs.com/cal_henderson/829635)
+
+<br>
+<br>
